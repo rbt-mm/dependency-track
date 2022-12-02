@@ -55,6 +55,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.util.List;
 
 /**
  * JAX-RS resources for processing components.
@@ -279,12 +280,13 @@ public class ComponentResource extends AlpineResource {
                 component.setLicense(StringUtils.trimToNull(jsonComponent.getLicense()));
                 component.setResolvedLicense(null);
             }
+            component.setLicenseUrl(StringUtils.trimToNull(jsonComponent.getLicenseUrl()));
             component.setParent(parent);
             component.setNotes(StringUtils.trimToNull(jsonComponent.getNotes()));
 
             component = qm.createComponent(component, true);
             Event.dispatch(new VulnerabilityAnalysisEvent(component));
-            Event.dispatch(new RepositoryMetaEvent(component));
+            Event.dispatch(new RepositoryMetaEvent(List.of(component)));
             return Response.status(Response.Status.CREATED).entity(component).build();
         }
     }
@@ -310,6 +312,7 @@ public class ComponentResource extends AlpineResource {
                 validator.validateProperty(jsonComponent, "group"),
                 validator.validateProperty(jsonComponent, "description"),
                 validator.validateProperty(jsonComponent, "license"),
+                validator.validateProperty(jsonComponent, "licenseUrl"),
                 validator.validateProperty(jsonComponent, "filename"),
                 validator.validateProperty(jsonComponent, "classifier"),
                 validator.validateProperty(jsonComponent, "cpe"),
@@ -362,11 +365,12 @@ public class ComponentResource extends AlpineResource {
                     component.setLicense(StringUtils.trimToNull(jsonComponent.getLicense()));
                     component.setResolvedLicense(null);
                 }
+                component.setLicenseUrl(StringUtils.trimToNull(jsonComponent.getLicenseUrl()));
                 component.setNotes(StringUtils.trimToNull(jsonComponent.getNotes()));
 
                 component = qm.updateComponent(component, true);
                 Event.dispatch(new VulnerabilityAnalysisEvent(component));
-                Event.dispatch(new RepositoryMetaEvent(component));
+                Event.dispatch(new RepositoryMetaEvent(List.of(component)));
                 return Response.ok(component).build();
             } else {
                 return Response.status(Response.Status.NOT_FOUND).entity("The UUID of the component could not be found.").build();
