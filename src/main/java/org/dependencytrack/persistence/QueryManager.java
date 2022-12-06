@@ -345,8 +345,12 @@ public class QueryManager extends AlpineQueryManager {
         return getProjectQueryManager().getProjects(team, excludeInactive, bypass, onlyRoot);
     }
 
-    public PaginatedResult getProjectsWithoutDescendantsOf(Project project){
-        return getProjectQueryManager().getProjectsWithoutDescendantsOf(project);
+    public PaginatedResult getProjectsWithoutDescendantsOf(final boolean excludeInactive, final Project project){
+        return getProjectQueryManager().getProjectsWithoutDescendantsOf(excludeInactive, project);
+    }
+
+    public PaginatedResult getProjectsWithoutDescendantsOf(final String name, final boolean excludeInactive, final Project project){
+        return getProjectQueryManager().getProjectsWithoutDescendantsOf(name, excludeInactive, project);
     }
 
     public boolean hasAccess(final Principal principal, final Project project) {
@@ -365,6 +369,13 @@ public class QueryManager extends AlpineQueryManager {
         return getProjectQueryManager().getChildrenProjects(uuid, includeMetrics, excludeInactive);
     }
 
+    public PaginatedResult getChildrenProjects(final Tag tag, final UUID uuid, final boolean includeMetrics, final boolean excludeInactive){
+        return getProjectQueryManager().getChildrenProjects(tag, uuid, includeMetrics, excludeInactive);
+    }
+
+    public PaginatedResult getChildrenProjects(final Classifier classifier, final UUID uuid, final boolean includeMetrics, final boolean excludeInactive){
+        return getProjectQueryManager().getChildrenProjects(classifier, uuid, includeMetrics, excludeInactive);
+    }
 
     public PaginatedResult getProjects(final Tag tag) {
         return getProjectQueryManager().getProjects(tag);
@@ -1147,12 +1158,20 @@ public class QueryManager extends AlpineQueryManager {
         return getCacheQueryManager().getComponentAnalysisCache(cacheType, targetHost, targetType, target);
     }
 
+    public List<ComponentAnalysisCache> getComponentAnalysisCache(ComponentAnalysisCache.CacheType cacheType, String targetType, String target) {
+        return getCacheQueryManager().getComponentAnalysisCache(cacheType, targetType, target);
+    }
+
     public synchronized void updateComponentAnalysisCache(ComponentAnalysisCache.CacheType cacheType, String targetHost, String targetType, String target, Date lastOccurrence, JsonObject result) {
         getCacheQueryManager().updateComponentAnalysisCache(cacheType, targetHost, targetType, target, lastOccurrence,  result);
     }
 
     public void clearComponentAnalysisCache() {
         getCacheQueryManager().clearComponentAnalysisCache();
+    }
+
+    public void clearComponentAnalysisCache(Date threshold) {
+        getCacheQueryManager().clearComponentAnalysisCache(threshold);
     }
 
     public void bind(Project project, List<Tag> tags) {
