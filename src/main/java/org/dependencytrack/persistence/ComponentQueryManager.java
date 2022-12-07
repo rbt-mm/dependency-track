@@ -612,7 +612,12 @@ final class ComponentQueryManager extends QueryManager implements IQueryManager 
             transientComponent.setPurlCoordinates(component.getPurlCoordinates());
             transientComponent.setDependencyGraph(component.getDependencyGraph());
             transientComponent.setExpandDependencyGraph(component.isExpandDependencyGraph());
-
+            transientComponent.setPurl(component.getPurl());
+            final RepositoryType type = RepositoryType.resolve(transientComponent.getPurl());
+            if (RepositoryType.UNSUPPORTED != type) {
+                final RepositoryMetaComponent repoMetaComponent = getRepositoryMetaComponent(type, transientComponent.getPurl().getNamespace(), transientComponent.getPurl().getName());
+                transientComponent.setRepositoryMeta(repoMetaComponent);
+            }
             project.getDependencyGraph().add(transientComponent);
         }
     }
@@ -640,7 +645,12 @@ final class ComponentQueryManager extends QueryManager implements IQueryManager 
             transientComponent.setPurlCoordinates(directDependencyComponent.getPurlCoordinates());
             transientComponent.setDependencyGraph(directDependencyComponent.getDependencyGraph());
             transientComponent.setExpandDependencyGraph(directDependencyComponent.isExpandDependencyGraph());
-
+            transientComponent.setPurl(directDependencyComponent.getPurl());
+            final RepositoryType type = RepositoryType.resolve(transientComponent.getPurl());
+            if (RepositoryType.UNSUPPORTED != type) {
+                final RepositoryMetaComponent repoMetaComponent = getRepositoryMetaComponent(type, transientComponent.getPurl().getNamespace(), transientComponent.getPurl().getName());
+                transientComponent.setRepositoryMeta(repoMetaComponent);
+            }
             component.getDependencyGraph().add(transientComponent);
         }
     }
