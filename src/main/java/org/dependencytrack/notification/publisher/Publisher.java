@@ -22,12 +22,18 @@ import alpine.common.logging.Logger;
 import alpine.common.util.UrlUtil;
 import alpine.model.ConfigProperty;
 import alpine.notification.Notification;
-import com.mitchellbosecke.pebble.PebbleEngine;
-import com.mitchellbosecke.pebble.template.PebbleTemplate;
+import io.pebbletemplates.pebble.PebbleEngine;
+import io.pebbletemplates.pebble.template.PebbleTemplate;
 import org.dependencytrack.exception.PublisherException;
 import org.dependencytrack.model.ConfigPropertyConstants;
 import org.dependencytrack.notification.NotificationScope;
-import org.dependencytrack.notification.vo.*;
+import org.dependencytrack.notification.vo.AnalysisDecisionChange;
+import org.dependencytrack.notification.vo.BomConsumedOrProcessed;
+import org.dependencytrack.notification.vo.NewVulnerabilityIdentified;
+import org.dependencytrack.notification.vo.NewVulnerableDependency;
+import org.dependencytrack.notification.vo.PolicyViolationIdentified;
+import org.dependencytrack.notification.vo.VexConsumedOrProcessed;
+import org.dependencytrack.notification.vo.ViolationAnalysisDecisionChange;
 import org.dependencytrack.persistence.QueryManager;
 import org.dependencytrack.util.NotificationUtil;
 
@@ -68,6 +74,9 @@ public interface Publisher {
         }
     }
 
+    default void enrichTemplateContext(final Map<String, Object> context) {
+    }
+
     default String prepareTemplate(final Notification notification, final PebbleTemplate template) {
 
         try (QueryManager qm = new QueryManager()) {
@@ -91,34 +100,32 @@ public interface Publisher {
             }
 
             if (NotificationScope.PORTFOLIO.name().equals(notification.getScope())) {
-                if (notification.getSubject() instanceof NewVulnerabilityIdentified) {
-                    final NewVulnerabilityIdentified subject = (NewVulnerabilityIdentified) notification.getSubject();
+                if (notification.getSubject() instanceof final NewVulnerabilityIdentified subject) {
                     context.put("subject", subject);
                     context.put("subjectJson", NotificationUtil.toJson(subject));
-                } else if (notification.getSubject() instanceof NewVulnerableDependency) {
-                    final NewVulnerableDependency subject = (NewVulnerableDependency) notification.getSubject();
+                } else if (notification.getSubject() instanceof final NewVulnerableDependency subject) {
                     context.put("subject", subject);
                     context.put("subjectJson", NotificationUtil.toJson(subject));
-                } else if (notification.getSubject() instanceof AnalysisDecisionChange) {
-                    final AnalysisDecisionChange subject = (AnalysisDecisionChange) notification.getSubject();
+                } else if (notification.getSubject() instanceof final AnalysisDecisionChange subject) {
                     context.put("subject", subject);
                     context.put("subjectJson", NotificationUtil.toJson(subject));
-                } else if (notification.getSubject() instanceof BomConsumedOrProcessed) {
-                    final BomConsumedOrProcessed subject = (BomConsumedOrProcessed) notification.getSubject();
+                } else if (notification.getSubject() instanceof final ViolationAnalysisDecisionChange subject) {
                     context.put("subject", subject);
                     context.put("subjectJson", NotificationUtil.toJson(subject));
-                } else if (notification.getSubject() instanceof VexConsumedOrProcessed) {
-                    final VexConsumedOrProcessed subject = (VexConsumedOrProcessed) notification.getSubject();
+                } else if (notification.getSubject() instanceof final BomConsumedOrProcessed subject) {
                     context.put("subject", subject);
                     context.put("subjectJson", NotificationUtil.toJson(subject));
-                } else if (notification.getSubject() instanceof PolicyViolationIdentified) {
-                    final PolicyViolationIdentified subject = (PolicyViolationIdentified) notification.getSubject();
+                } else if (notification.getSubject() instanceof final VexConsumedOrProcessed subject) {
+                    context.put("subject", subject);
+                    context.put("subjectJson", NotificationUtil.toJson(subject));
+                } else if (notification.getSubject() instanceof final PolicyViolationIdentified subject) {
                     context.put("subject", subject);
                     context.put("subjectJson", NotificationUtil.toJson(subject));
                 }
             }
+            enrichTemplateContext(context);
 
-            try (Writer writer = new StringWriter()) {
+            try (final Writer writer = new StringWriter()) {
                 template.evaluate(writer, context);
                 return writer.toString();
             } catch (IOException e) {
