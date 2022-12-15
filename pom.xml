@@ -24,7 +24,7 @@
     <parent>
         <groupId>us.springett</groupId>
         <artifactId>alpine-parent</artifactId>
-        <version>2.2.0-SNAPSHOT</version>
+        <version>2.2.0</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -85,6 +85,7 @@
         <lib.alpine.version>${project.parent.version}</lib.alpine.version>
         <lib.cpe-parser.version>2.0.2</lib.cpe-parser.version>
         <lib.cvss-calculator.version>1.4.1</lib.cvss-calculator.version>
+        <lib.owasp-rr-calculator.version>1.0.1</lib.owasp-rr-calculator.version>
         <lib.cyclonedx-java.version>7.3.0</lib.cyclonedx-java.version>
         <lib.jaxb.runtime.version>2.3.6</lib.jaxb.runtime.version>
         <lib.lucene.version>8.11.2</lib.lucene.version>
@@ -94,6 +95,7 @@
         <lib.vulndb-data-mirror.version>1.0.1</lib.vulndb-data-mirror.version>
         <lib.resilience4j.version>2.0.1</lib.resilience4j.version>
         <lib.woodstox.version>6.4.0</lib.woodstox.version>
+        <lib.junit-params.version>1.1.1</lib.junit-params.version>
         <!-- JDBC Drivers -->
         <lib.jdbc-driver.mssql.version>11.2.1.jre17</lib.jdbc-driver.mssql.version>
         <!-- Leave at 8.0.29 until https://github.com/datanucleus/datanucleus-rdbms/issues/446 is resolved! -->
@@ -101,9 +103,13 @@
         <lib.jdbc-driver.postgresql.version>42.5.1</lib.jdbc-driver.postgresql.version>
         <!-- Maven Plugin Properties -->
         <plugin.cyclonedx.projectType>application</plugin.cyclonedx.projectType>
+        <plugin.cyclonedx.outputFormat>json</plugin.cyclonedx.outputFormat>
         <plugin.retirejs.breakOnFailure>false</plugin.retirejs.breakOnFailure>
         <!-- SonarCloud properties -->
         <sonar.exclusions>src/main/webapp/**</sonar.exclusions>
+        <!-- CycloneDX CLI -->
+        <cyclonedx-cli.path>cyclonedx</cyclonedx-cli.path>
+        <services.bom.merge.skip>true</services.bom.merge.skip>
     </properties>
 
     <repositories>
@@ -144,6 +150,12 @@
             <groupId>us.springett</groupId>
             <artifactId>cvss-calculator</artifactId>
             <version>${lib.cvss-calculator.version}</version>
+        </dependency>
+        <!-- OWASP Risk Rating calculator -->
+        <dependency>
+            <groupId>us.springett</groupId>
+            <artifactId>owasp-risk-rating-calculator</artifactId>
+            <version>${lib.owasp-rr-calculator.version}</version>
         </dependency>
         <!-- CPE Parser -->
         <dependency>
@@ -306,6 +318,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>pl.pragmatists</groupId>
+            <artifactId>JUnitParams</artifactId>
+            <version>${lib.junit-params.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.glassfish.jersey.test-framework.providers</groupId>
             <artifactId>jersey-test-framework-provider-grizzly2</artifactId>
             <version>${lib.jersey.version}</version>
@@ -365,6 +382,31 @@
             </testResource>
         </testResources>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>merge-services-bom</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${cyclonedx-cli.path}</executable>
+                            <arguments>
+                                <argument>merge</argument>
+                                <argument>--input-files</argument>
+                                <argument>${project.build.directory}/bom.json</argument>
+                                <argument>${project.basedir}/src/main/resources/services.bom.json</argument>
+                                <argument>--output-file</argument>
+                                <argument>${project.build.directory}/bom.json</argument>
+                            </arguments>
+                            <skip>${services.bom.merge.skip}</skip>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.1.0</version>
