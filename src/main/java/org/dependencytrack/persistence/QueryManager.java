@@ -48,6 +48,7 @@ import org.dependencytrack.model.Cwe;
 import org.dependencytrack.model.DependencyMetrics;
 import org.dependencytrack.model.Finding;
 import org.dependencytrack.model.FindingAttribution;
+import org.dependencytrack.model.GroupedFinding;
 import org.dependencytrack.model.License;
 import org.dependencytrack.model.LicenseGroup;
 import org.dependencytrack.model.NotificationPublisher;
@@ -103,6 +104,8 @@ public class QueryManager extends AlpineQueryManager {
     private CacheQueryManager cacheQueryManager;
     private ComponentQueryManager componentQueryManager;
     private FindingsQueryManager findingsQueryManager;
+
+    private FindingsSearchQueryManager findingsSearchQueryManager;
     private LicenseQueryManager licenseQueryManager;
     private MetricsQueryManager metricsQueryManager;
     private NotificationQueryManager notificationQueryManager;
@@ -268,6 +271,17 @@ public class QueryManager extends AlpineQueryManager {
             findingsQueryManager = (request == null) ? new FindingsQueryManager(getPersistenceManager()) : new FindingsQueryManager(getPersistenceManager(), request);
         }
         return findingsQueryManager;
+    }
+
+    /**
+     * Lazy instantiation of FindingsSearchQueryManager.
+     * @return a FindingsSearchQueryManager object
+     */
+    private FindingsSearchQueryManager getFindingsSearchQueryManager() {
+        if (findingsSearchQueryManager == null) {
+            findingsSearchQueryManager = (request == null) ? new FindingsSearchQueryManager(getPersistenceManager()) : new FindingsSearchQueryManager(getPersistenceManager(), request);
+        }
+        return findingsSearchQueryManager;
     }
 
     /**
@@ -1015,6 +1029,14 @@ public class QueryManager extends AlpineQueryManager {
 
     public List<Finding> getFindings(Project project, boolean includeSuppressed) {
         return getFindingsQueryManager().getFindings(project, includeSuppressed);
+    }
+
+    public List<Finding> getAllFindings(final Map<String, String> filters, final boolean showSuppressed, final boolean showInactive) {
+        return getFindingsSearchQueryManager().getAllFindings(filters, showSuppressed, showInactive);
+    }
+
+    public List<GroupedFinding> getAllFindingsGroupedByVulnerability(final Map<String, String> filters, final boolean showInactive) {
+        return getFindingsSearchQueryManager().getAllFindingsGroupedByVulnerability(filters, showInactive);
     }
 
     public List<VulnerabilityMetrics> getVulnerabilityMetrics() {
