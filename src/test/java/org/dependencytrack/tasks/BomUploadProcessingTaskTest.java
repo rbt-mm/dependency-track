@@ -20,29 +20,36 @@ package org.dependencytrack.tasks;
 
 import alpine.event.framework.EventService;
 import alpine.notification.Notification;
+import alpine.notification.NotificationLevel;
 import alpine.notification.NotificationService;
 import alpine.notification.Subscriber;
 import alpine.notification.Subscription;
 import net.jcip.annotations.NotThreadSafe;
+import org.apache.commons.io.IOUtils;
 import org.dependencytrack.PersistenceCapableTest;
 import org.dependencytrack.event.BomUploadEvent;
 import org.dependencytrack.event.NewVulnerableDependencyAnalysisEvent;
 import org.dependencytrack.event.VulnerabilityAnalysisEvent;
-import org.dependencytrack.model.Severity;
-import org.dependencytrack.model.Vulnerability;
-import org.dependencytrack.model.VulnerableSoftware;
+import org.dependencytrack.model.Bom;
+import org.dependencytrack.model.Classifier;
+import org.dependencytrack.model.Component;
 import org.dependencytrack.model.ConfigPropertyConstants;
 import org.dependencytrack.model.Project;
-import org.dependencytrack.model.Component;
-import org.dependencytrack.model.Classifier;
+import org.dependencytrack.model.Severity;
+import org.dependencytrack.model.Vulnerability;
 import org.dependencytrack.model.VulnerabilityAnalysisLevel;
+import org.dependencytrack.model.VulnerableSoftware;
 import org.dependencytrack.notification.NotificationGroup;
+import org.dependencytrack.notification.NotificationScope;
+import org.dependencytrack.notification.vo.BomProcessingFailed;
 import org.dependencytrack.notification.vo.NewVulnerabilityIdentified;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -50,6 +57,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.dependencytrack.assertion.Assertions.assertConditionWithTimeout;
 
 @NotThreadSafe
@@ -95,6 +103,7 @@ public class BomUploadProcessingTaskTest extends PersistenceCapableTest {
                 ConfigPropertyConstants.SCANNER_INTERNAL_ENABLED.getDescription());
     }
 
+    @After
     public void tearDown() {
         NOTIFICATIONS.clear();
     }
@@ -138,7 +147,7 @@ public class BomUploadProcessingTaskTest extends PersistenceCapableTest {
         assertThat(components).hasSize(1);
 
         final Component component = components.get(0);
-        assertThat(component.getAuthor()).isEqualTo("Example Author");
+        assertThat(component.getAuthor()).isEqualTo("Sometimes this field is long because it is composed of a list of authors......................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................");
         assertThat(component.getPublisher()).isEqualTo("Example Incorporated");
         assertThat(component.getGroup()).isEqualTo("com.example");
         assertThat(component.getName()).isEqualTo("xmlutil");
@@ -165,6 +174,51 @@ public class BomUploadProcessingTaskTest extends PersistenceCapableTest {
                 },
                 n -> assertThat(n.getGroup()).isEqualTo(NotificationGroup.NEW_VULNERABLE_DEPENDENCY.name())
         );
+    }
+
+    @Test
+    public void informWithInvalidCycloneDxBomTest() throws Exception {
+        final Project project = qm.createProject("Acme Example", null, "1.0", null, null, null, true, false);
+
+        final byte[] bomBytes = """
+                {
+                  "bomFormat": "CycloneDX",
+                """.getBytes(StandardCharsets.UTF_8);
+
+        new BomUploadProcessingTask().inform(new BomUploadEvent(project.getUuid(), bomBytes));
+        assertConditionWithTimeout(() -> NOTIFICATIONS.size() >= 2, Duration.ofSeconds(5));
+
+        assertThat(NOTIFICATIONS).satisfiesExactly(
+                notification -> assertThat(notification.getGroup()).isEqualTo(NotificationGroup.PROJECT_CREATED.name()),
+                notification -> {
+                    assertThat(notification.getScope()).isEqualTo(NotificationScope.PORTFOLIO.name());
+                    assertThat(notification.getGroup()).isEqualTo(NotificationGroup.BOM_PROCESSING_FAILED.name());
+                    assertThat(notification.getLevel()).isEqualTo(NotificationLevel.ERROR);
+                    assertThat(notification.getTitle()).isNotBlank();
+                    assertThat(notification.getContent()).isNotBlank();
+                    assertThat(notification.getSubject()).isInstanceOf(BomProcessingFailed.class);
+                    final var subject = (BomProcessingFailed) notification.getSubject();
+                    assertThat(subject.getProject().getUuid()).isEqualTo(project.getUuid());
+                    assertThat(subject.getBom()).isEqualTo("ewogICJib21Gb3JtYXQiOiAiQ3ljbG9uZURYIiwK");
+                    assertThat(subject.getFormat()).isEqualTo(Bom.Format.CYCLONEDX);
+                    assertThat(subject.getSpecVersion()).isNull();
+                    assertThat(subject.getCause()).isEqualTo("Unable to parse BOM from byte array");
+                }
+        );
+
+        qm.getPersistenceManager().refresh(project);
+        assertThat(project.getClassifier()).isNull();
+        assertThat(project.getLastBomImport()).isNull();
+    }
+
+    @Test // https://github.com/DependencyTrack/dependency-track/issues/2859
+    public void informIssue2859Test() throws Exception {
+        final Project project = qm.createProject("Acme Example", null, "1.0", null, null, null, true, false);
+
+        final byte[] bomBytes = IOUtils.resourceToByteArray("/unit/bom-issue2859.xml");
+
+        assertThatNoException()
+                .isThrownBy(() -> new BomUploadProcessingTask().inform(new BomUploadEvent(project.getUuid(), bomBytes)));
     }
 
 }

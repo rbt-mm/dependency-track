@@ -24,7 +24,7 @@ import alpine.event.framework.LoggableSubscriber;
 import alpine.model.ConfigProperty;
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
-import kong.unirest.json.JSONObject;
+import org.apache.http.HttpStatus;
 import org.apache.http.StatusLine;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -43,6 +43,7 @@ import org.dependencytrack.parser.osv.OsvAdvisoryParser;
 import org.dependencytrack.parser.osv.model.OsvAdvisory;
 import org.dependencytrack.parser.osv.model.OsvAffectedPackage;
 import org.dependencytrack.persistence.QueryManager;
+import org.json.JSONObject;
 import us.springett.cvss.Cvss;
 import us.springett.cvss.Score;
 
@@ -59,9 +60,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.Scanner;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import static org.dependencytrack.model.ConfigPropertyConstants.VULNERABILITY_SOURCE_GOOGLE_OSV_ALIAS_SYNC_ENABLED;
 import static org.dependencytrack.model.ConfigPropertyConstants.VULNERABILITY_SOURCE_GOOGLE_OSV_BASE_URL;
 import static org.dependencytrack.model.ConfigPropertyConstants.VULNERABILITY_SOURCE_GOOGLE_OSV_ENABLED;
 import static org.dependencytrack.model.Severity.getSeverityByLevel;
@@ -71,25 +75,28 @@ import static org.dependencytrack.util.VulnerabilityUtil.normalizedCvssV3Score;
 public class OsvDownloadTask implements LoggableSubscriber {
 
     private static final Logger LOGGER = Logger.getLogger(OsvDownloadTask.class);
-    private String ecosystemConfig;
-    private List<String> ecosystems;
+    private Set<String> ecosystems;
     private String osvBaseUrl;
-
-    public List<String> getEnabledEcosystems() {
-        return this.ecosystems;
-    }
+    private boolean aliasSyncEnabled;
 
     public OsvDownloadTask() {
         try (final QueryManager qm = new QueryManager()) {
             final ConfigProperty enabled = qm.getConfigProperty(VULNERABILITY_SOURCE_GOOGLE_OSV_ENABLED.getGroupName(), VULNERABILITY_SOURCE_GOOGLE_OSV_ENABLED.getPropertyName());
             if (enabled != null) {
-                this.ecosystemConfig = enabled.getPropertyValue();
-                if (this.ecosystemConfig != null) {
-                    ecosystems = Arrays.stream(this.ecosystemConfig.split(";")).map(String::trim).toList();
+                final String ecosystemConfig = enabled.getPropertyValue();
+                if (ecosystemConfig != null) {
+                    ecosystems = Arrays.stream(ecosystemConfig.split(";")).map(String::trim).collect(Collectors.toSet());
                 }
                 this.osvBaseUrl = qm.getConfigProperty(VULNERABILITY_SOURCE_GOOGLE_OSV_BASE_URL.getGroupName(), VULNERABILITY_SOURCE_GOOGLE_OSV_BASE_URL.getPropertyName()).getPropertyValue();
                 if (this.osvBaseUrl != null && !this.osvBaseUrl.endsWith("/")) {
                     this.osvBaseUrl += "/";
+                }
+                final ConfigProperty aliasSyncProperty = qm.getConfigProperty(
+                        VULNERABILITY_SOURCE_GOOGLE_OSV_ALIAS_SYNC_ENABLED.getGroupName(),
+                        VULNERABILITY_SOURCE_GOOGLE_OSV_ALIAS_SYNC_ENABLED.getPropertyName()
+                );
+                if (aliasSyncProperty != null) {
+                    this.aliasSyncEnabled = "true".equals(aliasSyncProperty.getPropertyValue());
                 }
             }
         }
@@ -108,7 +115,7 @@ public class OsvDownloadTask implements LoggableSubscriber {
                     HttpUriRequest request = new HttpGet(url);
                     try (final CloseableHttpResponse response = HttpClientPool.getClient().execute(request)) {
                         final StatusLine status = response.getStatusLine();
-                        if (status.getStatusCode() == 200) {
+                        if (status.getStatusCode() == HttpStatus.SC_OK) {
                             try (InputStream in = response.getEntity().getContent();
                                  ZipInputStream zipInput = new ZipInputStream(in)) {
                                 unzipFolder(zipInput);
@@ -151,7 +158,7 @@ public class OsvDownloadTask implements LoggableSubscriber {
 
     public void updateDatasource(final OsvAdvisory advisory) {
 
-        try (QueryManager qm = new QueryManager()) {
+        try (QueryManager qm = new QueryManager().withL2CacheDisabled()) {
 
             LOGGER.debug("Synchronizing Google OSV advisory: " + advisory.getId());
             final Vulnerability vulnerability = mapAdvisoryToVulnerability(qm, advisory);
@@ -169,7 +176,7 @@ public class OsvDownloadTask implements LoggableSubscriber {
                synchronizedVulnerability  = qm.synchronizeVulnerability(vulnerability, false);
             }
 
-            if (advisory.getAliases() != null) {
+            if (aliasSyncEnabled && advisory.getAliases() != null) {
                 for (int i = 0; i < advisory.getAliases().size(); i++) {
                     final String alias = advisory.getAliases().get(i);
                     final VulnerabilityAlias vulnerabilityAlias = new VulnerabilityAlias();
@@ -352,7 +359,7 @@ public class OsvDownloadTask implements LoggableSubscriber {
         HttpUriRequest request = new HttpGet(url);
         try (final CloseableHttpResponse response = HttpClientPool.getClient().execute(request)) {
             final StatusLine status = response.getStatusLine();
-            if (status.getStatusCode() == 200) {
+            if (status.getStatusCode() == HttpStatus.SC_OK) {
                 try (InputStream in = response.getEntity().getContent();
                      Scanner scanner = new Scanner(in, StandardCharsets.UTF_8)) {
                     while (scanner.hasNextLine()) {
@@ -370,4 +377,10 @@ public class OsvDownloadTask implements LoggableSubscriber {
         }
         return ecosystems;
     }
+
+    public Set<String> getEnabledEcosystems() {
+        return Optional.ofNullable(this.ecosystems)
+                .orElseGet(Collections::emptySet);
+    }
+
 }

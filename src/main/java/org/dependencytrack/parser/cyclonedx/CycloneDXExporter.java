@@ -83,7 +83,9 @@ public class CycloneDXExporter {
         bom.setComponents(cycloneComponents);
         bom.setServices(cycloneServices);
         bom.setVulnerabilities(cycloneVulnerabilities);
-        if (components != null) ModelConverter.generateDependencies(qm, bom, project, components);
+        if (components != null) {
+            bom.setDependencies(ModelConverter.generateDependencies(project, components));
+        }
         return bom;
     }
 

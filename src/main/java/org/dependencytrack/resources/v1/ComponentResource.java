@@ -34,20 +34,17 @@ import io.swagger.annotations.ResponseHeader;
 import org.apache.commons.lang3.StringUtils;
 import org.dependencytrack.auth.Permissions;
 import org.dependencytrack.event.InternalComponentIdentificationEvent;
+import org.dependencytrack.event.PolicyEvaluationEvent;
 import org.dependencytrack.event.RepositoryMetaEvent;
 import org.dependencytrack.event.VulnerabilityAnalysisEvent;
 import org.dependencytrack.model.Component;
 import org.dependencytrack.model.ComponentIdentity;
 import org.dependencytrack.model.License;
 import org.dependencytrack.model.Project;
-import org.dependencytrack.model.RepositoryType;
 import org.dependencytrack.model.RepositoryMetaComponent;
+import org.dependencytrack.model.RepositoryType;
 import org.dependencytrack.persistence.QueryManager;
 import org.dependencytrack.util.InternalComponentIdentificationUtil;
-
-import java.util.List;
-import java.util.Map;
-
 import javax.validation.Validator;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -60,6 +57,8 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.util.List;
+import java.util.Map;
 
 /**
  * JAX-RS resources for processing components.
@@ -86,12 +85,18 @@ public class ComponentResource extends AlpineResource {
             @ApiResponse(code = 404, message = "The project could not be found")
     })
     @PermissionRequired(Permissions.Constants.VIEW_PORTFOLIO)
-    public Response getAllComponents(@PathParam("uuid") String uuid) {
+    public Response getAllComponents(
+            @ApiParam(value = "The UUID of the project to retrieve components for", required = true)
+            @PathParam("uuid") String uuid,
+            @ApiParam(value = "Optionally exclude recent components so only outdated components are returned", required = false)
+            @QueryParam("onlyOutdated") boolean onlyOutdated,
+            @ApiParam(value = "Optionally exclude transitive dependencies so only direct dependencies are returned", required = false)
+            @QueryParam("onlyDirect") boolean onlyDirect)  {
         try (QueryManager qm = new QueryManager(getAlpineRequest())) {
             final Project project = qm.getObjectByUuid(Project.class, uuid);
             if (project != null) {
                 if (qm.hasAccess(super.getPrincipal(), project)) {
-                    final PaginatedResult result = qm.getComponents(project, true);
+                    final PaginatedResult result = qm.getComponents(project, true, onlyOutdated, onlyDirect);
                     return Response.ok(result.getObjects()).header(TOTAL_COUNT_HEADER, result.getTotal()).build();
                 } else {
                     return Response.status(Response.Status.FORBIDDEN).entity("Access to the specified project is forbidden").build();
@@ -310,8 +315,13 @@ public class ComponentResource extends AlpineResource {
             component.setNotes(StringUtils.trimToNull(jsonComponent.getNotes()));
 
             component = qm.createComponent(component, true);
-            Event.dispatch(new VulnerabilityAnalysisEvent(component));
-            Event.dispatch(new RepositoryMetaEvent(List.of(component)));
+            Event.dispatch(
+                new VulnerabilityAnalysisEvent(component)
+                // Wait for RepositoryMetaEvent after VulnerabilityAnalysisEvent,
+                // as both might be needed in policy evaluation
+                .onSuccess(new RepositoryMetaEvent(List.of(component)))
+                .onSuccess(new PolicyEvaluationEvent(component))
+            );
             return Response.status(Response.Status.CREATED).entity(component).build();
         }
     }
@@ -394,8 +404,13 @@ public class ComponentResource extends AlpineResource {
                 component.setNotes(StringUtils.trimToNull(jsonComponent.getNotes()));
 
                 component = qm.updateComponent(component, true);
-                Event.dispatch(new VulnerabilityAnalysisEvent(component));
-                Event.dispatch(new RepositoryMetaEvent(List.of(component)));
+                Event.dispatch(
+                    new VulnerabilityAnalysisEvent(component)
+                    // Wait for RepositoryMetaEvent after VulnerabilityAnalysisEvent,
+// as both might be needed in policy evaluation
+                    .onSuccess(new RepositoryMetaEvent(List.of(component)))
+                    .onSuccess(new PolicyEvaluationEvent(component))
+                );
                 return Response.ok(component).build();
             } else {
                 return Response.status(Response.Status.NOT_FOUND).entity("The UUID of the component could not be found.").build();
